@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "RTE - Real-Time Translation & Call Support",
+  "version": "1.0.0",
+  "description": "Real-time meeting transcript translation and AI-powered call support for Google Meet and Microsoft Teams",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "unlimitedStorage",
+    "tabs",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://teams.microsoft.com/*",
+    "https://teams.live.com/*",
+    "https://translate.google.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "RTE - Real-Time Translation"
+  },
+  "options_page": "options/options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content/overlay.js", "content/meet-transcript.js"],
+      "css": ["styles/overlay.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://teams.microsoft.com/*", "https://teams.live.com/*"],
+      "js": ["content/overlay.js", "content/teams-transcript.js"],
+      "css": ["styles/overlay.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://translate.google.com/*"],
+      "js": ["content/translate-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "generate-question": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Q"
+      },
+      "description": "Generate a question for the other party"
+    },
+    "generate-simple-answer": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A"
+      },
+      "description": "Generate a simple answer"
+    },
+    "generate-detailed-answer": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E"
+      },
+      "description": "Generate a detailed professional answer"
+    },
+    "clear-translate": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Z"
+      },
+      "description": "Clear Google Translate source text"
+    }
+  }
+}
