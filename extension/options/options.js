@@ -1,5 +1,7 @@
 // ============================================================
 // RTE - Options Page Logic
+// Settings stored in chrome.storage.sync (persist across reinstall)
+// + chrome.storage.local (for documents and runtime data).
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -16,6 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       sections.forEach(s => s.classList.remove('active'));
       document.getElementById('section-' + sectionId).classList.add('active');
+
+      // Refresh sync status when navigating to backup section
+      if (sectionId === 'backup') refreshSyncStatus();
     });
   });
 
@@ -26,8 +31,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleAnthropicBtn = document.getElementById('toggleAnthropic');
   const saveApiBtn = document.getElementById('saveApiKeys');
   const spellingEl = document.getElementById('spellingCorrection');
+  const sentenceCountEl = document.getElementById('sentenceCount');
   const uploadAreaEl = document.getElementById('uploadArea');
   const fileInputEl = document.getElementById('fileInput');
+  const uploadProgressEl = document.getElementById('uploadProgress');
+  const progressFillEl = document.getElementById('progressFill');
+  const progressTextEl = document.getElementById('progressText');
   const docNameEl = document.getElementById('docName');
   const docContentEl = document.getElementById('docContent');
   const addManualDocBtn = document.getElementById('addManualDoc');
@@ -35,6 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const clearAllBtn = document.getElementById('clearAllData');
   const toastEl = document.getElementById('toast');
   const toastTextEl = document.getElementById('toastText');
+  const exportRegistryBtn = document.getElementById('exportRegistry');
+  const registryUploadAreaEl = document.getElementById('registryUploadArea');
+  const registryFileInputEl = document.getElementById('registryFileInput');
 
   // ──────────── Toast ────────────
   let toastTimer;
@@ -46,23 +58,33 @@ document.addEventListener('DOMContentLoaded', () => {
     toastTimer = setTimeout(() => toastEl.classList.remove('visible'), 3000);
   }
 
-  // ──────────── Load Settings ────────────
-  chrome.storage.local.get(
-    ['aiProvider', 'openaiKey', 'anthropicKey', 'spellingCorrection', 'documents'],
-    (data) => {
-      if (data.openaiKey) openaiKeyEl.value = data.openaiKey;
-      if (data.anthropicKey) anthropicKeyEl.value = data.anthropicKey;
+  // ──────────── Load Settings (from sync first, then local) ────────────
+  async function loadAllSettings() {
+    const settingsKeys = ['aiProvider', 'openaiKey', 'anthropicKey', 'spellingCorrection', 'customShortcuts', 'sentenceCount'];
+    const syncData = await new Promise(r => chrome.storage.sync.get(settingsKeys, r));
+    const localData = await new Promise(r => chrome.storage.local.get([...settingsKeys, 'documents'], r));
 
-      if (data.aiProvider) {
-        const radio = document.querySelector(`input[name="aiProvider"][value="${data.aiProvider}"]`);
-        if (radio) radio.checked = true;
-      }
+    // Merge: sync overrides local for settings keys
+    const data = { ...localData, ...syncData };
 
-      spellingEl.checked = data.spellingCorrection !== false;
+    if (data.openaiKey) openaiKeyEl.value = data.openaiKey;
+    if (data.anthropicKey) anthropicKeyEl.value = data.anthropicKey;
 
-      renderDocuments(data.documents || []);
+    if (data.aiProvider) {
+      const radio = document.querySelector(`input[name="aiProvider"][value="${data.aiProvider}"]`);
+      if (radio) radio.checked = true;
     }
-  );
+
+    spellingEl.checked = data.spellingCorrection !== false;
+
+    if (data.sentenceCount !== undefined) {
+      sentenceCountEl.value = String(data.sentenceCount);
+    }
+
+    renderDocuments(localData.documents || []);
+  }
+
+  loadAllSettings();
 
   // ──────────── Toggle Password Visibility ────────────
   function makeToggle(btn, input) {
@@ -75,25 +97,41 @@ document.addEventListener('DOMContentLoaded', () => {
   makeToggle(toggleOpenaiBtn, openaiKeyEl);
   makeToggle(toggleAnthropicBtn, anthropicKeyEl);
 
-  // ──────────── Save API Keys ────────────
-  saveApiBtn.addEventListener('click', () => {
+  // ──────────── Save API Keys (to sync + local) ────────────
+  saveApiBtn.addEventListener('click', async () => {
     const aiProvider = document.querySelector('input[name="aiProvider"]:checked').value;
     const openaiKey = openaiKeyEl.value.trim();
     const anthropicKey = anthropicKeyEl.value.trim();
 
-    chrome.storage.local.set({ aiProvider, openaiKey, anthropicKey }, () => {
-      showToast('API configuration saved successfully!');
-    });
+    const data = { aiProvider, openaiKey, anthropicKey };
+
+    // Save to both sync and local
+    try {
+      await new Promise(r => chrome.storage.sync.set(data, r));
+    } catch { /* sync not available */ }
+    await new Promise(r => chrome.storage.local.set(data, r));
+
+    showToast('API configuration saved and synced!');
   });
 
   // ──────────── Spelling Correction Toggle ────────────
-  spellingEl.addEventListener('change', () => {
-    chrome.storage.local.set({ spellingCorrection: spellingEl.checked }, () => {
-      showToast(spellingEl.checked ? 'Spelling correction enabled' : 'Spelling correction disabled');
-    });
+  spellingEl.addEventListener('change', async () => {
+    const val = spellingEl.checked;
+    try { await new Promise(r => chrome.storage.sync.set({ spellingCorrection: val }, r)); } catch {}
+    await new Promise(r => chrome.storage.local.set({ spellingCorrection: val }, r));
+    showToast(val ? 'Spelling correction enabled' : 'Spelling correction disabled');
   });
 
-  // ──────────── File Upload ────────────
+  // ──────────── Sentence Count ────────────
+  sentenceCountEl.addEventListener('change', async () => {
+    const raw = sentenceCountEl.value;
+    const value = raw === 'all' ? 'all' : parseInt(raw, 10);
+    try { await new Promise(r => chrome.storage.sync.set({ sentenceCount: value }, r)); } catch {}
+    await new Promise(r => chrome.storage.local.set({ sentenceCount: value }, r));
+    showToast('Sentence count updated');
+  });
+
+  // ──────────── File Upload (Multi-file with PDF/DOCX support) ────────────
   uploadAreaEl.addEventListener('click', () => fileInputEl.click());
 
   uploadAreaEl.addEventListener('dragover', (e) => {
@@ -116,12 +154,66 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInputEl.value = '';
   });
 
-  function handleFiles(files) {
-    Array.from(files).forEach((file) => {
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+
+    // Show progress
+    uploadProgressEl.style.display = 'block';
+    progressFillEl.style.width = '0%';
+    progressTextEl.textContent = `Processing 0 of ${files.length} files...`;
+
+    let processed = 0;
+    let succeeded = 0;
+    const errors = [];
+
+    for (const file of files) {
+      try {
+        progressTextEl.textContent = `Processing ${processed + 1} of ${files.length}: ${file.name}`;
+
+        // Check if file type is supported
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (typeof FileParser !== 'undefined' && FileParser.isSupported(file.name)) {
+          const result = await FileParser.parseFile(file);
+          await addDocument(result.name, result.content, result.type);
+          succeeded++;
+        } else {
+          // Fallback: try reading as text
+          const content = await readFileAsText(file);
+          if (content && content.trim()) {
+            await addDocument(file.name, content, 'text');
+            succeeded++;
+          } else {
+            errors.push(`${file.name}: Unsupported format or empty file`);
+          }
+        }
+      } catch (err) {
+        errors.push(`${file.name}: ${err.message}`);
+      }
+
+      processed++;
+      progressFillEl.style.width = ((processed / files.length) * 100) + '%';
+    }
+
+    // Hide progress after a brief delay
+    setTimeout(() => { uploadProgressEl.style.display = 'none'; }, 1000);
+
+    // Show results
+    if (succeeded > 0 && errors.length === 0) {
+      showToast(`${succeeded} document${succeeded > 1 ? 's' : ''} uploaded successfully!`);
+    } else if (succeeded > 0 && errors.length > 0) {
+      showToast(`${succeeded} uploaded, ${errors.length} failed. Check console for details.`, true);
+      console.warn('[RTE Upload Errors]', errors);
+    } else if (errors.length > 0) {
+      showToast(errors[0], true);
+    }
+  }
+
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        addDocument(file.name, e.target.result);
-      };
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsText(file);
     });
   }
@@ -140,25 +232,30 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    addDocument(name, content);
+    addDocument(name, content, 'text');
     docNameEl.value = '';
     docContentEl.value = '';
   });
 
   // ──────────── Document Storage ────────────
-  function addDocument(name, content) {
-    chrome.storage.local.get(['documents'], (data) => {
-      const documents = data.documents || [];
-      documents.push({
-        id: Date.now().toString(),
-        name,
-        content,
-        size: content.length,
-        addedAt: new Date().toISOString(),
-      });
-      chrome.storage.local.set({ documents }, () => {
-        renderDocuments(documents);
-        showToast(`Document "${name}" added.`);
+  async function addDocument(name, content, type = 'text') {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['documents'], (data) => {
+        const documents = data.documents || [];
+        documents.push({
+          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 7),
+          name,
+          content,
+          type: type || 'text',
+          size: content.length,
+          addedAt: new Date().toISOString(),
+        });
+        chrome.storage.local.set({ documents }, () => {
+          renderDocuments(documents);
+          // Sync documents to chrome.storage.sync (chunked)
+          syncDocumentsToBackground(documents);
+          resolve();
+        });
       });
     });
   }
@@ -168,9 +265,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const documents = (data.documents || []).filter(d => d.id !== id);
       chrome.storage.local.set({ documents }, () => {
         renderDocuments(documents);
+        syncDocumentsToBackground(documents);
         showToast('Document removed.');
       });
     });
+  }
+
+  function syncDocumentsToBackground(documents) {
+    chrome.runtime.sendMessage({ type: 'syncDocuments', documents }).catch(() => {});
   }
 
   function renderDocuments(documents) {
@@ -185,12 +287,13 @@ document.addEventListener('DOMContentLoaded', () => {
           ? `${(doc.size / 1024).toFixed(1)} KB`
           : `${doc.size} chars`;
         const dateStr = new Date(doc.addedAt).toLocaleDateString();
+        const typeIcon = getTypeIcon(doc.type || doc.name);
 
         return `
           <div class="doc-item" data-id="${doc.id}">
             <div class="doc-info">
-              <span class="doc-name">${escapeHtml(doc.name)}</span>
-              <span class="doc-meta">${sizeStr} · Added ${dateStr}</span>
+              <span class="doc-name">${typeIcon} ${escapeHtml(doc.name)}</span>
+              <span class="doc-meta">${sizeStr} · ${doc.type ? doc.type.toUpperCase() : 'TEXT'} · Added ${dateStr}</span>
             </div>
             <button class="doc-remove" data-id="${doc.id}" title="Remove">✕</button>
           </div>
@@ -202,6 +305,15 @@ document.addEventListener('DOMContentLoaded', () => {
     documentListEl.querySelectorAll('.doc-remove').forEach((btn) => {
       btn.addEventListener('click', () => removeDocument(btn.dataset.id));
     });
+  }
+
+  function getTypeIcon(typeOrName) {
+    const type = typeof typeOrName === 'string' ? typeOrName.toLowerCase() : '';
+    if (type === 'pdf' || type.endsWith('.pdf')) return '📕';
+    if (type === 'docx' || type === 'doc' || type.endsWith('.docx') || type.endsWith('.doc')) return '📘';
+    if (type.endsWith('.json')) return '📋';
+    if (type.endsWith('.csv')) return '📊';
+    return '📄';
   }
 
   function escapeHtml(str) {
@@ -216,22 +328,27 @@ document.addEventListener('DOMContentLoaded', () => {
     'generate-simple-answer': 'Ctrl+Shift+A',
     'generate-detailed-answer': 'Ctrl+Shift+E',
     'clear-translate': 'Ctrl+Shift+Z',
+    'copy-captions': 'Ctrl+Shift+C',
   };
 
   const shortcutInputs = document.querySelectorAll('.shortcut-input');
   const saveShortcutsBtn = document.getElementById('saveShortcuts');
   const resetShortcutsBtn = document.getElementById('resetShortcuts');
 
-  // Load saved shortcuts
-  chrome.storage.local.get(['customShortcuts'], (data) => {
-    const shortcuts = data.customShortcuts || DEFAULT_SHORTCUTS;
+  // Load saved shortcuts (from sync first, then local)
+  async function loadShortcuts() {
+    const syncData = await new Promise(r => chrome.storage.sync.get(['customShortcuts'], r));
+    const localData = await new Promise(r => chrome.storage.local.get(['customShortcuts'], r));
+    const shortcuts = syncData.customShortcuts || localData.customShortcuts || DEFAULT_SHORTCUTS;
     shortcutInputs.forEach((input) => {
       const cmd = input.dataset.command;
       if (shortcuts[cmd]) {
         input.value = shortcuts[cmd];
       }
     });
-  });
+    return shortcuts;
+  }
+  loadShortcuts();
 
   // Shortcut recorder
   shortcutInputs.forEach((input) => {
@@ -242,10 +359,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     input.addEventListener('blur', () => {
       input.classList.remove('recording');
-      // Restore previous value if nothing was recorded
       if (input.value === 'Press keys...') {
-        chrome.storage.local.get(['customShortcuts'], (data) => {
-          const shortcuts = data.customShortcuts || DEFAULT_SHORTCUTS;
+        loadShortcuts().then((shortcuts) => {
           input.value = shortcuts[input.dataset.command] || '';
         });
       }
@@ -255,7 +370,6 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       e.stopPropagation();
 
-      // Ignore lone modifier keys
       if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
 
       const parts = [];
@@ -263,19 +377,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.altKey) parts.push('Alt');
       if (e.shiftKey) parts.push('Shift');
 
-      // Must have at least one modifier
       if (parts.length === 0) {
         input.value = 'Need modifier key';
         setTimeout(() => { input.value = 'Press keys...'; }, 1000);
         return;
       }
 
-      // Get the key name
       let keyName = e.key;
       if (keyName === ' ') keyName = 'Space';
       else if (keyName.length === 1) keyName = keyName.toUpperCase();
       else if (keyName.startsWith('Arrow')) keyName = keyName;
-      // Map special keys
       const keyMap = {
         'Escape': 'Esc', 'Backspace': 'Backspace', 'Delete': 'Delete',
         'Enter': 'Enter', 'Tab': 'Tab',
@@ -285,7 +396,6 @@ document.addEventListener('DOMContentLoaded', () => {
       parts.push(keyName);
       const combo = parts.join('+');
 
-      // Check for duplicates
       let duplicate = false;
       shortcutInputs.forEach((other) => {
         if (other !== input && other.value === combo) {
@@ -313,17 +423,16 @@ document.addEventListener('DOMContentLoaded', () => {
     'generate-question': 'Generate questions',
     'generate-simple-answer': 'Quick answer',
     'generate-detailed-answer': 'Detailed answer',
-    'clear-translate': 'Clear Translate',
+    'clear-translate': 'Clear history',
+    'copy-captions': 'Copy captions',
   };
 
-  // Check if shortcuts differ from defaults and show/hide notice
   function checkAndShowSyncNotice(shortcuts) {
     const hasChanges = Object.keys(DEFAULT_SHORTCUTS).some(
       (key) => shortcuts[key] !== DEFAULT_SHORTCUTS[key]
     );
 
     if (hasChanges) {
-      // Build the shortcut reference list
       noticeSyncList.innerHTML = Object.entries(shortcuts)
         .map(([cmd, combo]) => `
           <div class="notice-shortcut-row">
@@ -338,19 +447,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Show notice on load if shortcuts are already customised
-  chrome.storage.local.get(['customShortcuts'], (data) => {
-    if (data.customShortcuts) {
-      checkAndShowSyncNotice(data.customShortcuts);
-    }
-  });
+  loadShortcuts().then(checkAndShowSyncNotice);
 
-  // Open Chrome extension shortcuts page
   openChromeShortcutsBtn.addEventListener('click', () => {
     chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
   });
 
-  // Save shortcuts
-  saveShortcutsBtn.addEventListener('click', () => {
+  // Save shortcuts (to sync + local)
+  saveShortcutsBtn.addEventListener('click', async () => {
     const customShortcuts = {};
     let valid = true;
     shortcutInputs.forEach((input) => {
@@ -367,36 +471,131 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    chrome.storage.local.set({ customShortcuts }, () => {
-      showToast('Keyboard shortcuts saved!');
-      checkAndShowSyncNotice(customShortcuts);
-    });
+    try { await new Promise(r => chrome.storage.sync.set({ customShortcuts }, r)); } catch {}
+    await new Promise(r => chrome.storage.local.set({ customShortcuts }, r));
+    showToast('Keyboard shortcuts saved and synced!');
+    checkAndShowSyncNotice(customShortcuts);
   });
 
   // Reset shortcuts
-  resetShortcutsBtn.addEventListener('click', () => {
-    chrome.storage.local.set({ customShortcuts: DEFAULT_SHORTCUTS }, () => {
-      shortcutInputs.forEach((input) => {
-        input.value = DEFAULT_SHORTCUTS[input.dataset.command] || '';
-      });
-      chromeSyncNotice.style.display = 'none';
-      showToast('Shortcuts reset to defaults.');
+  resetShortcutsBtn.addEventListener('click', async () => {
+    try { await new Promise(r => chrome.storage.sync.set({ customShortcuts: DEFAULT_SHORTCUTS }, r)); } catch {}
+    await new Promise(r => chrome.storage.local.set({ customShortcuts: DEFAULT_SHORTCUTS }, r));
+    shortcutInputs.forEach((input) => {
+      input.value = DEFAULT_SHORTCUTS[input.dataset.command] || '';
     });
+    chromeSyncNotice.style.display = 'none';
+    showToast('Shortcuts reset to defaults.');
   });
+
+  // ──────────── Export Registry ────────────
+  exportRegistryBtn.addEventListener('click', async () => {
+    try {
+      const jsonStr = await FileParser.exportRegistry();
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rte-registry-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Registry exported successfully!');
+    } catch (err) {
+      showToast('Export failed: ' + err.message, true);
+    }
+  });
+
+  // ──────────── Import Registry ────────────
+  registryUploadAreaEl.addEventListener('click', () => registryFileInputEl.click());
+
+  registryUploadAreaEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    registryUploadAreaEl.classList.add('drag-over');
+  });
+
+  registryUploadAreaEl.addEventListener('dragleave', () => {
+    registryUploadAreaEl.classList.remove('drag-over');
+  });
+
+  registryUploadAreaEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    registryUploadAreaEl.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      handleRegistryImport(e.dataTransfer.files[0]);
+    }
+  });
+
+  registryFileInputEl.addEventListener('change', () => {
+    if (registryFileInputEl.files.length > 0) {
+      handleRegistryImport(registryFileInputEl.files[0]);
+    }
+    registryFileInputEl.value = '';
+  });
+
+  async function handleRegistryImport(file) {
+    if (!file.name.endsWith('.json')) {
+      showToast('Please select a .json registry file.', true);
+      return;
+    }
+
+    try {
+      const text = await readFileAsText(file);
+      const result = await FileParser.importRegistry(text);
+      showToast(`Registry imported: ${result.settingsCount} settings, ${result.documentsCount} documents restored!`);
+
+      // Reload the page to reflect changes
+      setTimeout(() => loadAllSettings(), 500);
+    } catch (err) {
+      showToast('Import failed: ' + err.message, true);
+    }
+  }
+
+  // ──────────── Sync Status ────────────
+  async function refreshSyncStatus() {
+    try {
+      const syncData = await new Promise(r => chrome.storage.sync.get(null, r));
+      const localData = await new Promise(r => chrome.storage.local.get(['documents'], r));
+
+      document.getElementById('syncApiKeys').textContent =
+        (syncData.openaiKey || syncData.anthropicKey) ? '✓ Synced' : '✗ Not set';
+      document.getElementById('syncApiKeys').className =
+        'sync-value ' + ((syncData.openaiKey || syncData.anthropicKey) ? 'sync-ok' : 'sync-warn');
+
+      document.getElementById('syncProvider').textContent =
+        syncData.aiProvider ? `✓ ${syncData.aiProvider}` : '✗ Not set';
+      document.getElementById('syncProvider').className =
+        'sync-value ' + (syncData.aiProvider ? 'sync-ok' : 'sync-warn');
+
+      const docCount = (localData.documents || []).length;
+      const hasSyncDocs = syncData._doc_meta && syncData._doc_meta.chunkCount > 0;
+      document.getElementById('syncDocuments').textContent =
+        `${docCount} local` + (hasSyncDocs ? ' · Synced' : ' · Not synced');
+      document.getElementById('syncDocuments').className =
+        'sync-value ' + (hasSyncDocs ? 'sync-ok' : 'sync-warn');
+
+      document.getElementById('syncShortcuts').textContent =
+        syncData.customShortcuts ? '✓ Synced' : 'Default';
+      document.getElementById('syncShortcuts').className =
+        'sync-value ' + (syncData.customShortcuts ? 'sync-ok' : 'sync-neutral');
+    } catch {
+      document.getElementById('syncApiKeys').textContent = 'Error checking sync';
+    }
+  }
 
   // ──────────── Clear All Data ────────────
   clearAllBtn.addEventListener('click', () => {
-    if (!confirm('Are you sure you want to clear all data? This cannot be undone.')) return;
+    if (!confirm('Are you sure you want to clear all local data? Synced settings (API keys, shortcuts) will be preserved in Chrome sync.')) return;
 
     chrome.storage.local.clear(() => {
       openaiKeyEl.value = '';
       anthropicKeyEl.value = '';
       spellingEl.checked = true;
+      sentenceCountEl.value = '5';
       renderDocuments([]);
       shortcutInputs.forEach((input) => {
         input.value = DEFAULT_SHORTCUTS[input.dataset.command] || '';
       });
-      showToast('All data cleared.');
+      showToast('Local data cleared. Synced settings preserved.');
     });
   });
 });

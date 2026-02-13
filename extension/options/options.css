@@ -764,3 +764,140 @@ code {
 .toast.error {
   border-left-color: var(--danger);
 }
+
+/* ──────── Persist Badge ──────── */
+.persist-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(34, 197, 94, 0.15);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.persist-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+/* ──────── Upload Progress ──────── */
+.upload-progress {
+  margin-top: 14px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a855f7);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ──────── Settings Row ──────── */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.setting-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.select-small {
+  width: auto;
+  min-width: 180px;
+  padding: 8px 32px 8px 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color 0.2s ease;
+}
+
+.select-small:hover {
+  border-color: var(--border-focus);
+}
+
+.select-small:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ──────── Upload Area Small (Registry) ──────── */
+.upload-area-small {
+  padding: 24px;
+}
+
+.upload-area-small .upload-icon {
+  font-size: 28px;
+}
+
+/* ──────── Sync Status ──────── */
+.sync-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sync-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.sync-value {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.sync-ok {
+  color: var(--success);
+}
+
+.sync-warn {
+  color: #fbbf24;
+}
+
+.sync-neutral {
+  color: var(--text-muted);
+}

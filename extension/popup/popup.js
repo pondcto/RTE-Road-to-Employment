@@ -1,5 +1,5 @@
 // ============================================================
-// RTE - Popup Logic
+// RTE - Popup Logic (with MsgCopyer Integration)
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const infoPlatform = document.getElementById('infoPlatform');
   const infoLines = document.getElementById('infoLines');
   const settingsLink = document.getElementById('settingsLink');
+  const popupSentenceCount = document.getElementById('popupSentenceCount');
 
   let isActive = false;
 
@@ -36,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
       statusText.textContent = 'Active — Capturing transcripts';
       infoSection.style.display = 'block';
 
-      const platformNames = { meet: 'Google Meet', teams: 'Microsoft Teams' };
+      const platformNames = { meet: 'Google Meet', teams: 'Microsoft Teams', zoom: 'Zoom' };
       infoPlatform.textContent = platformNames[status.platform] || 'Waiting for meeting...';
       infoLines.textContent = status.transcriptCount || '0';
     } else {
@@ -53,6 +54,31 @@ document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.local.get(['sourceLang', 'targetLang'], (data) => {
     if (data.sourceLang) sourceLangEl.value = data.sourceLang;
     if (data.targetLang) targetLangEl.value = data.targetLang;
+  });
+
+  // ──────────── Load Sentence Count (from sync first) ────────────
+  chrome.storage.sync.get({ sentenceCount: 5 }, (syncData) => {
+    if (chrome.runtime.lastError) {
+      chrome.storage.local.get({ sentenceCount: 5 }, (localData) => {
+        popupSentenceCount.value = String(localData.sentenceCount);
+      });
+    } else {
+      popupSentenceCount.value = String(syncData.sentenceCount);
+    }
+  });
+
+  // ──────────── Save Sentence Count ────────────
+  popupSentenceCount.addEventListener('change', () => {
+    const raw = popupSentenceCount.value;
+    const value = raw === 'all' ? 'all' : parseInt(raw, 10);
+
+    // Save to both sync (persist) and local
+    chrome.storage.sync.set({ sentenceCount: value }, () => {
+      if (chrome.runtime.lastError) {
+        chrome.storage.local.set({ sentenceCount: value });
+      }
+    });
+    chrome.storage.local.set({ sentenceCount: value });
   });
 
   // ──────────── Save Languages on Change ────────────
@@ -100,11 +126,20 @@ document.addEventListener('DOMContentLoaded', () => {
     'generate-question': 'Generate questions',
     'generate-simple-answer': 'Quick answer',
     'generate-detailed-answer': 'Detailed answer',
-    'clear-translate': 'Clear Google Translate',
+    'clear-translate': 'Clear history',
+    'copy-captions': 'Copy captions',
   };
 
-  chrome.storage.local.get(['customShortcuts'], (data) => {
-    const shortcuts = data.customShortcuts;
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function loadPopupShortcuts() {
+    const syncData = await new Promise(r => chrome.storage.sync.get(['customShortcuts'], r));
+    const localData = await new Promise(r => chrome.storage.local.get(['customShortcuts'], r));
+    const shortcuts = syncData.customShortcuts || localData.customShortcuts;
     if (!shortcuts) return; // keep defaults shown in HTML
 
     const container = document.getElementById('popupShortcutList');
@@ -112,12 +147,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     container.innerHTML = Object.entries(shortcuts)
       .map(([cmd, combo]) => `
-        <div class="shortcut-row">
-          <kbd>${combo}</kbd>
-          <span>${shortcutLabels[cmd] || cmd}</span>
+        <div class="shortcut-row${cmd === 'copy-captions' ? ' shortcut-row-highlight' : ''}">
+          <kbd>${escapeHtml(combo)}</kbd>
+          <span>${escapeHtml(shortcutLabels[cmd] || cmd)}</span>
         </div>
       `).join('');
-  });
+  }
+
+  loadPopupShortcuts();
 
   // ──────────── Auto-refresh ────────────
   refreshStatus();

@@ -1,17 +1,18 @@
 // ============================================================
 // RTE - Microsoft Teams Transcript Capture (Optimized)
 //
-// Same 3s interval approach as Google Meet.
+// 1.5s interval. Sends FULL visible caption batch.
+// The background manages block ordering and deduplication.
 // ============================================================
 
 (function () {
   if (window.__rteTeamsInit) return;
   window.__rteTeamsInit = true;
 
-  const INTERVAL_MS = 3000;
-  const speakerState = new Map();
-  let activeSpeakers = new Set();
+  const INTERVAL_MS = 1500;
   let observer = null;
+  let trackingInterval = null;
+  let lastBatchJSON = '';
 
   // ── Caption Extraction ──
   const CAPTION_SELECTORS = [
@@ -21,7 +22,6 @@
 
   function extractCaptions() {
     const results = [];
-
     for (const sel of CAPTION_SELECTORS) {
       const container = document.querySelector(sel);
       if (!container) continue;
@@ -31,7 +31,6 @@
       }
       if (results.length) return results;
     }
-
     for (const el of document.querySelectorAll('[class*="caption"],[class*="subtitle"],[class*="transcript"]')) {
       const r = parseLine(el);
       if (r.text && r.text.length > 3) results.push(r);
@@ -54,56 +53,39 @@
     return { speaker, text };
   }
 
-  // ── Delta Logic ──
-  function sendNewContent(speaker, entry) {
-    if (!entry.currentText || entry.currentText === entry.lastSentText) return;
-    let textToSend, isNewTurn;
-    if (!entry.lastSentText) {
-      textToSend = entry.currentText; isNewTurn = true;
-    } else if (entry.currentText.startsWith(entry.lastSentText)) {
-      const delta = entry.currentText.slice(entry.lastSentText.length).trim();
-      if (!delta) { entry.lastSentText = entry.currentText; return; }
-      textToSend = delta; isNewTurn = false;
-    } else if (entry.currentText.length > entry.lastSentLength + 20) {
-      const delta = entry.currentText.slice(entry.lastSentLength).trim();
-      if (!delta) { entry.lastSentText = entry.currentText; entry.lastSentLength = entry.currentText.length; return; }
-      textToSend = delta; isNewTurn = false;
-    } else {
-      entry.lastSentText = entry.currentText; entry.lastSentLength = entry.currentText.length; return;
-    }
-    chrome.runtime.sendMessage({ type: 'transcript', platform: 'teams', speaker, text: textToSend, isNewTurn }).catch(() => {});
-    entry.lastSentText = entry.currentText; entry.lastSentLength = entry.currentText.length;
-  }
-
-  // ── Tracking ──
-  function updateTracking() {
+  // ── Send batch ──
+  function sendBatch() {
     const captions = extractCaptions();
-    const current = new Set();
-    for (const { speaker, text } of captions) {
-      current.add(speaker);
-      let e = speakerState.get(speaker);
-      if (!e) { e = { currentText: '', lastSentText: '', lastSentLength: 0 }; speakerState.set(speaker, e); }
-      e.currentText = text;
-    }
-    for (const prev of activeSpeakers) {
-      if (!current.has(prev)) { const e = speakerState.get(prev); if (e) { sendNewContent(prev, e); speakerState.delete(prev); } }
-    }
-    activeSpeakers = current;
+    const json = JSON.stringify(captions);
+    if (json === lastBatchJSON) return;
+    lastBatchJSON = json;
+
+    chrome.runtime.sendMessage({
+      type: 'captionBatch', platform: 'teams', captions,
+    }).catch(() => {});
   }
 
-  // ── Start ──
+  // ── Start / Stop ──
   function start() {
     let pending = false;
     observer = new MutationObserver(() => {
       if (pending) return; pending = true;
-      requestAnimationFrame(() => { updateTracking(); pending = false; });
+      requestAnimationFrame(() => { sendBatch(); pending = false; });
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    setInterval(updateTracking, INTERVAL_MS);
-    setInterval(() => { for (const [s, e] of speakerState) sendNewContent(s, e); }, INTERVAL_MS);
+    trackingInterval = setInterval(sendBatch, INTERVAL_MS);
   }
 
-  chrome.runtime.onMessage.addListener((msg) => { if (msg.type === 'ping') return true; });
+  function stop() {
+    if (observer) { observer.disconnect(); observer = null; }
+    if (trackingInterval) { clearInterval(trackingInterval); trackingInterval = null; }
+    lastBatchJSON = '';
+  }
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'ping') return true;
+    if (msg.type === 'rteDeactivated') { stop(); return; }
+  });
 
   const readyCheck = setInterval(() => {
     if (document.querySelector('video,[data-tid],[class*="calling"],[class*="meeting"]') || document.readyState === 'complete') {

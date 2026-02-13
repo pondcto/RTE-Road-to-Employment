@@ -31,7 +31,6 @@
   document.body.appendChild(overlay);
 
   const $ = (id) => document.getElementById(id);
-  const overlayEl = $('rte-overlay');
   const headerEl = $('rte-overlay-header');
   const titleEl = $('rte-overlay-title-text');
   const bodyEl = $('rte-overlay-body');
@@ -43,16 +42,42 @@
   let isStreaming = false;
   let streamedText = '';
   let renderPending = false;
+  let userScrolledUp = false;  // Track if user manually scrolled away from bottom
+
+  // Detect user scrolling during streaming
+  bodyEl.addEventListener('scroll', () => {
+    if (!isStreaming) return;
+    // If user is near the bottom (within 30px), consider them "following"
+    const atBottom = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 30;
+    userScrolledUp = !atBottom;
+  }, { passive: true });
 
   // ── Custom Shortcuts ──
   const DEFAULTS = {
     'generate-question': 'Ctrl+Shift+Q', 'generate-simple-answer': 'Ctrl+Shift+A',
     'generate-detailed-answer': 'Ctrl+Shift+E', 'clear-translate': 'Ctrl+Shift+Z',
+    'copy-captions': 'Ctrl+Shift+C',
   };
   let shortcuts = { ...DEFAULTS };
 
-  chrome.storage.local.get(['customShortcuts'], (d) => { if (d.customShortcuts) shortcuts = d.customShortcuts; });
-  chrome.storage.onChanged.addListener((c) => { if (c.customShortcuts?.newValue) shortcuts = c.customShortcuts.newValue; });
+  // Load from sync first, then local as fallback
+  function loadShortcuts() {
+    chrome.storage.sync.get(['customShortcuts'], (syncResult) => {
+      if (!chrome.runtime.lastError && syncResult.customShortcuts) {
+        shortcuts = syncResult.customShortcuts;
+      } else {
+        chrome.storage.local.get(['customShortcuts'], (localResult) => {
+          if (!chrome.runtime.lastError && localResult.customShortcuts) {
+            shortcuts = localResult.customShortcuts;
+          }
+        });
+      }
+    });
+  }
+  loadShortcuts();
+  chrome.storage.onChanged.addListener((c) => {
+    if (c.customShortcuts?.newValue) shortcuts = c.customShortcuts.newValue;
+  });
 
   function eventToCombo(e) {
     if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
@@ -75,6 +100,8 @@
     const reverseMap = Object.fromEntries(Object.entries(shortcuts).map(([c, k]) => [k, c]));
     const cmd = reverseMap[combo];
     if (!cmd) return;
+    // Let caption-copyer.js handle copy-captions directly (needs user gesture for clipboard)
+    if (cmd === 'copy-captions') return;
     e.preventDefault();
     e.stopPropagation();
     chrome.runtime.sendMessage({ type: 'customCommand', command: cmd });
@@ -84,22 +111,31 @@
   let dragging = false, dx = 0, dy = 0;
   headerEl.addEventListener('mousedown', (e) => {
     if (e.target.tagName === 'BUTTON') return;
-    dragging = true; dx = e.clientX - overlayEl.offsetLeft; dy = e.clientY - overlayEl.offsetTop;
-    overlayEl.style.transition = 'none';
+    dragging = true;
+    const rect = overlay.getBoundingClientRect();
+    dx = e.clientX - rect.left;
+    dy = e.clientY - rect.top;
+    overlay.style.transition = 'none';
   });
   document.addEventListener('mousemove', (e) => {
     if (!dragging) return;
-    overlayEl.style.left = (e.clientX - dx) + 'px'; overlayEl.style.top = (e.clientY - dy) + 'px';
-    overlayEl.style.right = 'auto'; overlayEl.style.bottom = 'auto';
+    // Switch to absolute pixel positioning (remove centering transform)
+    overlay.style.left = (e.clientX - dx) + 'px';
+    overlay.style.top = (e.clientY - dy) + 'px';
+    overlay.style.right = 'auto';
+    overlay.style.bottom = 'auto';
+    overlay.style.transform = 'none';
   });
-  document.addEventListener('mouseup', () => { dragging = false; overlayEl.style.transition = ''; });
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; overlay.style.transition = ''; }
+  });
 
   // ── Actions ──
-  closeBtn.addEventListener('click', () => { overlayEl.classList.remove('rte-overlay-visible'); isStreaming = false; });
+  closeBtn.addEventListener('click', () => { overlay.classList.remove('rte-overlay-visible'); isStreaming = false; });
   copyBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(streamedText || contentEl.textContent).then(() => {
       copyBtn.textContent = '✓'; setTimeout(() => { copyBtn.textContent = '📋'; }, 1500);
-    });
+    }).catch(() => {});
   });
 
   // ── Markdown Renderer ──
@@ -137,7 +173,7 @@
     contentEl.innerHTML = md(text) + (cursor ? '<span class="rte-cursor"></span>' : '');
   }
 
-  // Throttle rendering during streaming (every 80ms max)
+  // Throttle rendering during streaming (every ~80ms via rAF)
   function renderThrottled(text, cursor) {
     if (renderPending) return;
     renderPending = true;
@@ -154,41 +190,55 @@
   chrome.runtime.onMessage.addListener((msg) => {
     switch (msg.type) {
       case 'streamStart':
-        isStreaming = true; streamedText = '';
+        isStreaming = true; streamedText = ''; userScrolledUp = false;
         titleEl.textContent = LABELS[msg.mode] || 'RTE Assistant';
         loadingEl.style.display = 'none'; contentEl.style.display = 'block';
-        overlayEl.classList.remove('rte-overlay-error');
-        overlayEl.classList.add('rte-overlay-visible', 'rte-streaming');
+        overlay.classList.remove('rte-overlay-error');
+        overlay.classList.add('rte-overlay-visible', 'rte-streaming');
+        // Reset position to center of screen
+        overlay.style.top = '50%';
+        overlay.style.left = '50%';
+        overlay.style.right = 'auto';
+        overlay.style.bottom = 'auto';
+        overlay.style.transform = '';
         render('', true);
+        bodyEl.scrollTop = 0;
         break;
 
       case 'streamChunk':
         if (!isStreaming) break;
         streamedText += msg.token;
         renderThrottled(streamedText, true);
-        bodyEl.scrollTop = 0;
+        // Only auto-scroll if user hasn't manually scrolled up
+        if (!userScrolledUp) {
+          bodyEl.scrollTop = bodyEl.scrollHeight;
+        }
         break;
 
       case 'streamEnd':
         isStreaming = false;
-        overlayEl.classList.remove('rte-streaming');
+        overlay.classList.remove('rte-streaming');
         render(streamedText, false);
-        bodyEl.scrollTop = 0;
+        // Only auto-scroll if user hasn't manually scrolled up
+        if (!userScrolledUp) {
+          bodyEl.scrollTop = bodyEl.scrollHeight;
+        }
+        userScrolledUp = false;
         break;
 
       case 'showOverlay':
-        isStreaming = false; overlayEl.classList.remove('rte-streaming');
+        isStreaming = false; overlay.classList.remove('rte-streaming');
         titleEl.textContent = LABELS[msg.mode] || 'RTE Assistant';
         if (msg.content === null) {
           loadingEl.style.display = 'flex'; contentEl.style.display = 'none';
           streamedText = ''; render('', false);
-          overlayEl.classList.remove('rte-overlay-error');
+          overlay.classList.remove('rte-overlay-error');
         } else {
           loadingEl.style.display = 'none'; contentEl.style.display = 'block';
           streamedText = msg.content; render(msg.content, false);
-          overlayEl.classList.toggle('rte-overlay-error', !!msg.isError);
+          overlay.classList.toggle('rte-overlay-error', !!msg.isError);
         }
-        overlayEl.classList.add('rte-overlay-visible');
+        overlay.classList.add('rte-overlay-visible');
         break;
     }
   });

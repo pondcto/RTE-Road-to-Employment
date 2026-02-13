@@ -4,8 +4,9 @@
 
 #rte-overlay {
   position: fixed;
-  bottom: 120px;
-  right: 24px;
+  top: 50%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-50%) scale(0.95);
   width: 420px;
   max-height: 480px;
   background: #1a1a2e;
@@ -16,18 +17,21 @@
     0 0 40px rgba(99, 102, 241, 0.1);
   z-index: 2147483647;
   font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-  display: none;
+  display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Use visibility + pointer-events instead of display:none for smooth animation */
+  visibility: hidden;
+  pointer-events: none;
   opacity: 0;
-  transform: translateY(20px) scale(0.95);
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease;
 }
 
 #rte-overlay.rte-overlay-visible {
-  display: flex;
+  visibility: visible;
+  pointer-events: auto;
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateX(-50%) translateY(-50%) scale(1);
 }
 
 #rte-overlay.rte-overlay-error .rte-overlay-body {

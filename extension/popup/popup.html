@@ -138,6 +138,22 @@
     </div>
   </section>
 
+  <!-- Caption Copy Setting -->
+  <section class="section caption-section">
+    <div class="caption-setting-row">
+      <label class="label" for="popupSentenceCount" style="margin-bottom:0;">Copy sentences</label>
+      <select class="select select-mini" id="popupSentenceCount">
+        <option value="all">All</option>
+        <option value="50">50</option>
+        <option value="20">20</option>
+        <option value="10">10</option>
+        <option value="5" selected>5</option>
+        <option value="3">3</option>
+        <option value="1">1</option>
+      </select>
+    </div>
+  </section>
+
   <!-- Shortcuts Reminder -->
   <section class="section shortcuts-section">
     <p class="shortcuts-title">Keyboard Shortcuts <span style="font-size:10px;color:#64748b;font-weight:400;">(customizable in Settings)</span></p>
@@ -156,15 +172,26 @@
       </div>
       <div class="shortcut-row">
         <kbd>Ctrl+Shift+Z</kbd>
-        <span>Clear Google Translate</span>
+        <span>Clear history</span>
+      </div>
+      <div class="shortcut-row shortcut-row-highlight">
+        <kbd>Ctrl+Shift+C</kbd>
+        <span>Copy captions</span>
       </div>
     </div>
+  </section>
+
+  <!-- Platforms -->
+  <section class="section platforms-section">
+    <span class="platform-badge gmeet">Google Meet</span>
+    <span class="platform-badge teams">Teams</span>
+    <span class="platform-badge zoom">Zoom</span>
   </section>
 
   <!-- Footer -->
   <footer class="footer">
     <a href="#" id="settingsLink" class="footer-link">Settings</a>
-    <span class="footer-version">v1.0.0</span>
+    <span class="footer-version">v1.1.0</span>
   </footer>
 
   <script src="popup.js"></script>
