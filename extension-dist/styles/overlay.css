@@ -1,0 +1,245 @@
+/* ============================================================
+   RTE - Overlay Styles (injected into meeting pages)
+   ============================================================ */
+
+#rte-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-50%) scale(0.95);
+  width: 420px;
+  max-height: 480px;
+  background: #1a1a2e;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 16px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(99, 102, 241, 0.1);
+  z-index: 2147483647;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Use visibility + pointer-events instead of display:none for smooth animation */
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease;
+}
+
+#rte-overlay.rte-overlay-visible {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateX(-50%) translateY(-50%) scale(1);
+}
+
+#rte-overlay.rte-overlay-error .rte-overlay-body {
+  border-left: 3px solid #ef4444;
+}
+
+/* Header */
+.rte-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #16213e, #1a1a2e);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  cursor: grab;
+  user-select: none;
+}
+
+.rte-overlay-header:active {
+  cursor: grabbing;
+}
+
+.rte-overlay-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rte-overlay-icon {
+  font-size: 16px;
+}
+
+.rte-overlay-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.rte-overlay-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #94a3b8;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.rte-overlay-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+/* Body */
+.rte-overlay-body {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 380px;
+  color: #cbd5e1;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.rte-overlay-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rte-overlay-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rte-overlay-body::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 3px;
+}
+
+/* Loading Spinner */
+.rte-overlay-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #818cf8;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.rte-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #818cf8;
+  border-radius: 50%;
+  animation: rteSpin 0.8s linear infinite;
+}
+
+@keyframes rteSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Content */
+.rte-overlay-content {
+  word-break: break-word;
+}
+
+/* ──────── Markdown Rendered Elements ──────── */
+.rte-md-h {
+  color: #e2e8f0;
+  margin: 6px 0 4px;
+  line-height: 1.3;
+}
+
+h3.rte-md-h {
+  font-size: 17px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+h4.rte-md-h {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+h5.rte-md-h {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+.rte-md-p {
+  margin: 2px 0;
+  line-height: 1.7;
+}
+
+.rte-md-br {
+  height: 8px;
+}
+
+.rte-md-bold {
+  color: #f1f5f9;
+  font-weight: 700;
+}
+
+.rte-md-italic {
+  font-style: italic;
+  color: #c4b5fd;
+}
+
+.rte-md-code {
+  display: inline;
+  padding: 1px 5px;
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 4px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  color: #a5b4fc;
+}
+
+.rte-md-ul,
+.rte-md-ol {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.rte-md-ul li,
+.rte-md-ol li {
+  margin: 3px 0;
+  line-height: 1.6;
+}
+
+.rte-md-ul li::marker {
+  color: #818cf8;
+}
+
+.rte-md-ol li::marker {
+  color: #818cf8;
+  font-weight: 600;
+}
+
+.rte-overlay-content del {
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+/* Typing Cursor */
+.rte-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #818cf8;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: rteBlink 0.6s step-end infinite;
+}
+
+#rte-overlay:not(.rte-streaming) .rte-cursor {
+  display: none;
+}
+
+@keyframes rteBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

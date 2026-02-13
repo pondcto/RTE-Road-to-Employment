@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>RTE Extension</title>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen" style="display:none;">
+    <header class="header">
+      <div class="header-brand">
+        <div class="logo">R</div>
+        <div>
+          <h1 class="header-title">RTE</h1>
+          <p class="header-subtitle">Enter password to continue</p>
+        </div>
+      </div>
+    </header>
+    <section class="section">
+      <label class="label">Password</label>
+      <input type="password" class="input-password" id="loginPassword" placeholder="Enter password..." autocomplete="off" />
+      <p class="login-error" id="loginError" style="display:none;">Incorrect password</p>
+      <button class="btn btn-primary" id="loginBtn" style="margin-top:12px;">
+        <span>Unlock</span>
+      </button>
+    </section>
+  </div>
+
+  <!-- Main App (hidden until authenticated) -->
+  <div id="mainApp" style="display:none;">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="logo">R</div>
+      <div>
+        <h1 class="header-title">RTE</h1>
+        <p class="header-subtitle">Real-Time Translation & Call Support</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Status Badge -->
+  <div class="status-bar" id="statusBar">
+    <span class="status-dot" id="statusDot"></span>
+    <span class="status-text" id="statusText">Inactive</span>
+  </div>
+
+  <!-- Language Selection -->
+  <section class="section">
+    <label class="label">Source Language (Meeting)</label>
+    <select class="select" id="sourceLang">
+      <option value="auto">Auto Detect</option>
+      <option value="en" selected>English</option>
+      <option value="th">Thai</option>
+      <option value="ja">Japanese</option>
+      <option value="ko">Korean</option>
+      <option value="zh-CN">Chinese (Simplified)</option>
+      <option value="zh-TW">Chinese (Traditional)</option>
+      <option value="vi">Vietnamese</option>
+      <option value="id">Indonesian</option>
+      <option value="ms">Malay</option>
+      <option value="hi">Hindi</option>
+      <option value="ar">Arabic</option>
+      <option value="fr">French</option>
+      <option value="de">German</option>
+      <option value="es">Spanish</option>
+      <option value="pt">Portuguese</option>
+      <option value="ru">Russian</option>
+      <option value="it">Italian</option>
+      <option value="nl">Dutch</option>
+      <option value="pl">Polish</option>
+      <option value="tr">Turkish</option>
+      <option value="sv">Swedish</option>
+      <option value="da">Danish</option>
+      <option value="fi">Finnish</option>
+      <option value="no">Norwegian</option>
+      <option value="uk">Ukrainian</option>
+      <option value="cs">Czech</option>
+      <option value="ro">Romanian</option>
+      <option value="hu">Hungarian</option>
+      <option value="el">Greek</option>
+      <option value="he">Hebrew</option>
+      <option value="bn">Bengali</option>
+      <option value="ta">Tamil</option>
+      <option value="te">Telugu</option>
+      <option value="mr">Marathi</option>
+      <option value="ur">Urdu</option>
+      <option value="fa">Persian</option>
+      <option value="sw">Swahili</option>
+      <option value="tl">Filipino</option>
+      <option value="my">Myanmar</option>
+      <option value="km">Khmer</option>
+      <option value="lo">Lao</option>
+    </select>
+
+    <label class="label" style="margin-top: 12px;">Target Language (Translation)</label>
+    <select class="select" id="targetLang">
+      <option value="en">English</option>
+      <option value="th" selected>Thai</option>
+      <option value="ja">Japanese</option>
+      <option value="ko">Korean</option>
+      <option value="zh-CN">Chinese (Simplified)</option>
+      <option value="zh-TW">Chinese (Traditional)</option>
+      <option value="vi">Vietnamese</option>
+      <option value="id">Indonesian</option>
+      <option value="ms">Malay</option>
+      <option value="hi">Hindi</option>
+      <option value="ar">Arabic</option>
+      <option value="fr">French</option>
+      <option value="de">German</option>
+      <option value="es">Spanish</option>
+      <option value="pt">Portuguese</option>
+      <option value="ru">Russian</option>
+      <option value="it">Italian</option>
+      <option value="nl">Dutch</option>
+      <option value="pl">Polish</option>
+      <option value="tr">Turkish</option>
+      <option value="sv">Swedish</option>
+      <option value="da">Danish</option>
+      <option value="fi">Finnish</option>
+      <option value="no">Norwegian</option>
+      <option value="uk">Ukrainian</option>
+      <option value="cs">Czech</option>
+      <option value="ro">Romanian</option>
+      <option value="hu">Hungarian</option>
+      <option value="el">Greek</option>
+      <option value="he">Hebrew</option>
+      <option value="bn">Bengali</option>
+      <option value="ta">Tamil</option>
+      <option value="te">Telugu</option>
+      <option value="mr">Marathi</option>
+      <option value="ur">Urdu</option>
+      <option value="fa">Persian</option>
+      <option value="sw">Swahili</option>
+      <option value="tl">Filipino</option>
+      <option value="my">Myanmar</option>
+      <option value="km">Khmer</option>
+      <option value="lo">Lao</option>
+    </select>
+  </section>
+
+  <!-- Activate Button -->
+  <section class="section">
+    <button class="btn btn-primary" id="activateBtn">
+      <span class="btn-icon" id="btnIcon">▶</span>
+      <span id="btnText">Activate</span>
+    </button>
+  </section>
+
+  <!-- Info Section -->
+  <section class="section info-section" id="infoSection" style="display:none;">
+    <div class="info-row">
+      <span class="info-label">Platform</span>
+      <span class="info-value" id="infoPlatform">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Transcript Lines</span>
+      <span class="info-value" id="infoLines">0</span>
+    </div>
+  </section>
+
+  <!-- Caption Copy Setting -->
+  <section class="section caption-section">
+    <div class="caption-setting-row">
+      <label class="label" for="popupSentenceCount" style="margin-bottom:0;">Copy sentences</label>
+      <select class="select select-mini" id="popupSentenceCount">
+        <option value="all">All</option>
+        <option value="50">50</option>
+        <option value="20">20</option>
+        <option value="10">10</option>
+        <option value="5" selected>5</option>
+        <option value="3">3</option>
+        <option value="1">1</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Shortcuts Reminder -->
+  <section class="section shortcuts-section">
+    <p class="shortcuts-title">Keyboard Shortcuts <span style="font-size:10px;color:#64748b;font-weight:400;">(customizable in Settings)</span></p>
+    <div id="popupShortcutList">
+      <div class="shortcut-row">
+        <kbd>Ctrl+Shift+Q</kbd>
+        <span>Generate questions</span>
+      </div>
+      <div class="shortcut-row">
+        <kbd>Ctrl+Shift+A</kbd>
+        <span>Quick answer</span>
+      </div>
+      <div class="shortcut-row">
+        <kbd>Ctrl+Shift+E</kbd>
+        <span>Detailed answer</span>
+      </div>
+      <div class="shortcut-row">
+        <kbd>Ctrl+Shift+Z</kbd>
+        <span>Clear history</span>
+      </div>
+      <div class="shortcut-row shortcut-row-highlight">
+        <kbd>Ctrl+Shift+C</kbd>
+        <span>Copy captions</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Platforms -->
+  <section class="section platforms-section">
+    <span class="platform-badge gmeet">Google Meet</span>
+    <span class="platform-badge teams">Teams</span>
+    <span class="platform-badge zoom">Zoom</span>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <a href="#" id="settingsLink" class="footer-link">Settings</a>
+    <a href="#" id="lockLink" class="footer-link" style="color:#ef4444;">Lock</a>
+    <span class="footer-version">v1.1.0</span>
+  </footer>
+
+  </div><!-- /mainApp -->
+
+  <script src="popup.js"></script>
+</body>
+</html>

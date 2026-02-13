@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="options.css" />
+  <title>RTE Settings</title>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">R</div>
+        <div>
+          <div class="sidebar-title">RTE Settings</div>
+          <div class="sidebar-version">v1.1.0</div>
+        </div>
+      </div>
+
+      <ul class="sidebar-nav">
+        <li class="sidebar-item active" data-section="api">
+          <span class="sidebar-icon">🔑</span>
+          <span>API Configuration</span>
+        </li>
+        <li class="sidebar-item" data-section="documents">
+          <span class="sidebar-icon">📄</span>
+          <span>Documents</span>
+        </li>
+        <li class="sidebar-item" data-section="general">
+          <span class="sidebar-icon">⚙️</span>
+          <span>General</span>
+        </li>
+        <li class="sidebar-item" data-section="backup">
+          <span class="sidebar-icon">💾</span>
+          <span>Backup & Registry</span>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+
+      <!-- API Configuration Section -->
+      <section class="content-section active" id="section-api">
+        <h2 class="section-title">API Configuration</h2>
+        <p class="section-desc">Configure your AI provider API keys for spelling correction and call support features. Keys are stored securely and persist across reinstalls.</p>
+
+        <div class="persist-badge">
+          <span class="persist-icon">🔄</span>
+          <span>Settings in this section are automatically synced and preserved across extension reinstalls.</span>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">AI Provider</h3>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="aiProvider" value="openai" checked />
+              <span class="radio-custom"></span>
+              <div>
+                <strong>OpenAI</strong>
+                <span class="radio-desc">GPT-4o for high-quality responses</span>
+              </div>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="aiProvider" value="anthropic" />
+              <span class="radio-custom"></span>
+              <div>
+                <strong>Anthropic</strong>
+                <span class="radio-desc">Claude for nuanced analysis</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">OpenAI API Key</h3>
+          <div class="input-group">
+            <input type="password" class="input" id="openaiKey" placeholder="sk-..." autocomplete="off" />
+            <button class="btn-icon-small" id="toggleOpenai" title="Show/Hide">👁️</button>
+          </div>
+          <p class="input-hint">Get your key from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a></p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Anthropic API Key</h3>
+          <div class="input-group">
+            <input type="password" class="input" id="anthropicKey" placeholder="sk-ant-..." autocomplete="off" />
+            <button class="btn-icon-small" id="toggleAnthropic" title="Show/Hide">👁️</button>
+          </div>
+          <p class="input-hint">Get your key from <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p>
+        </div>
+
+        <button class="btn btn-primary" id="saveApiKeys">Save API Configuration</button>
+      </section>
+
+      <!-- Documents Section -->
+      <section class="content-section" id="section-documents">
+        <h2 class="section-title">Support Documents</h2>
+        <p class="section-desc">Upload documents that will be used as context for AI-generated questions and answers during calls. Supports PDF, DOC, DOCX, and text-based files.</p>
+
+        <!-- Upload Area -->
+        <div class="card">
+          <h3 class="card-title">Upload Documents</h3>
+          <p class="card-desc">Drag & drop multiple files or click to browse. You can upload several files at once.</p>
+
+          <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <p class="upload-text">Drag & drop files here, or click to browse</p>
+            <p class="upload-hint">Supports PDF, DOC, DOCX, TXT, MD, JSON, CSV, and more</p>
+            <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.txt,.md,.json,.csv,.log,.xml,.html,.js,.py,.ts,.rtf,.jsx,.tsx,.css,.yaml,.yml,.toml,.ini,.cfg" hidden />
+          </div>
+
+          <!-- Upload Progress -->
+          <div class="upload-progress" id="uploadProgress" style="display:none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p class="progress-text" id="progressText">Processing files...</p>
+          </div>
+
+          <div class="divider-text">or paste text directly</div>
+
+          <div class="manual-input">
+            <input type="text" class="input" id="docName" placeholder="Document name" />
+            <textarea class="textarea" id="docContent" placeholder="Paste document content here..."></textarea>
+            <button class="btn btn-secondary" id="addManualDoc">Add Document</button>
+          </div>
+        </div>
+
+        <!-- Document List -->
+        <div class="card">
+          <h3 class="card-title">Uploaded Documents</h3>
+          <div id="documentList" class="document-list">
+            <p class="empty-state">No documents uploaded yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- General Settings Section -->
+      <section class="content-section" id="section-general">
+        <h2 class="section-title">General Settings</h2>
+        <p class="section-desc">Configure general extension behaviour.</p>
+
+        <div class="card">
+          <h3 class="card-title">Transcript Processing</h3>
+
+          <label class="toggle-label">
+            <div>
+              <strong>Spelling Correction</strong>
+              <p class="toggle-desc">Use AI to correct spelling and grammar in captured transcripts before sending to Google Translate.</p>
+            </div>
+            <div class="toggle">
+              <input type="checkbox" id="spellingCorrection" checked />
+              <span class="toggle-slider"></span>
+            </div>
+          </label>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Caption Copy Settings</h3>
+          <p class="card-desc">Configure the Ctrl+Shift+C caption copy feature (from MsgCopyer).</p>
+
+          <div class="setting-row">
+            <label class="setting-label" for="sentenceCount">Sentences to copy</label>
+            <select class="select-small" id="sentenceCount">
+              <option value="all">All</option>
+              <option value="50">50 sentences</option>
+              <option value="20">20 sentences</option>
+              <option value="10">10 sentences</option>
+              <option value="5" selected>5 sentences (default)</option>
+              <option value="3">3 sentences</option>
+              <option value="1">1 sentence</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Keyboard Shortcuts</h3>
+          <p class="card-desc">Click on a shortcut field and press your desired key combination to change it.</p>
+
+          <div class="shortcut-editor-grid">
+            <div class="shortcut-editor-item">
+              <span class="shortcut-label">Generate suggested questions</span>
+              <input type="text" class="shortcut-input" id="shortcut-generate-question" data-command="generate-question" readonly placeholder="Click to set..." />
+            </div>
+            <div class="shortcut-editor-item">
+              <span class="shortcut-label">Generate a quick, concise answer</span>
+              <input type="text" class="shortcut-input" id="shortcut-generate-simple-answer" data-command="generate-simple-answer" readonly placeholder="Click to set..." />
+            </div>
+            <div class="shortcut-editor-item">
+              <span class="shortcut-label">Generate a detailed, expert answer</span>
+              <input type="text" class="shortcut-input" id="shortcut-generate-detailed-answer" data-command="generate-detailed-answer" readonly placeholder="Click to set..." />
+            </div>
+            <div class="shortcut-editor-item">
+              <span class="shortcut-label">Clear conversation history</span>
+              <input type="text" class="shortcut-input" id="shortcut-clear-translate" data-command="clear-translate" readonly placeholder="Click to set..." />
+            </div>
+            <div class="shortcut-editor-item">
+              <span class="shortcut-label">Copy captions to clipboard</span>
+              <input type="text" class="shortcut-input" id="shortcut-copy-captions" data-command="copy-captions" readonly placeholder="Click to set..." />
+            </div>
+          </div>
+
+          <div style="margin-top: 14px; display: flex; gap: 10px; align-items: center;">
+            <button class="btn btn-secondary" id="saveShortcuts" style="margin-top:0;">Save Shortcuts</button>
+            <button class="btn btn-secondary" id="resetShortcuts" style="margin-top:0;">Reset to Defaults</button>
+          </div>
+
+          <p class="input-hint" style="margin-top:10px;">
+            Shortcuts require at least one modifier key (Ctrl, Alt, or Shift) plus a letter or number.
+          </p>
+
+          <!-- Chrome sync notice -->
+          <div class="chrome-sync-notice" id="chromeSyncNotice" style="display:none;">
+            <div class="notice-icon">⚠️</div>
+            <div class="notice-body">
+              <strong>Important: Sync with Chrome</strong>
+              <p>Your custom shortcuts work on the meeting page, but Chrome also has its own built-in shortcut mappings for this extension. To avoid conflicts and ensure shortcuts work globally, please also update them in Chrome's shortcut settings.</p>
+              <div class="notice-shortcuts" id="noticeSyncList"></div>
+              <button class="btn btn-accent" id="openChromeShortcuts">Open Chrome Shortcut Settings</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Data</h3>
+          <button class="btn btn-danger" id="clearAllData">Clear All Data</button>
+          <p class="input-hint" style="margin-top:8px;">This will remove all saved settings, API keys, and documents from local storage. Synced settings will be preserved.</p>
+        </div>
+      </section>
+
+      <!-- Backup & Registry Section -->
+      <section class="content-section" id="section-backup">
+        <h2 class="section-title">Backup & Registry</h2>
+        <p class="section-desc">Export your complete settings and documents as a registry file, or import a previously saved registry to restore everything.</p>
+
+        <div class="persist-badge">
+          <span class="persist-icon">💡</span>
+          <span>API keys and core settings are automatically synced via Chrome and survive reinstalls. Use Export/Import for documents and complete backups.</span>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Export Registry</h3>
+          <p class="card-desc">Download a complete backup of all settings, API keys, and documents as a JSON file.</p>
+          <button class="btn btn-primary" id="exportRegistry">Export Registry File</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Import Registry</h3>
+          <p class="card-desc">Upload a previously exported registry file to restore all settings and documents. This will merge with existing data.</p>
+
+          <div class="upload-area upload-area-small" id="registryUploadArea">
+            <div class="upload-icon">📦</div>
+            <p class="upload-text">Drop a registry JSON file here, or click to browse</p>
+            <p class="upload-hint">Only .json registry files are accepted</p>
+            <input type="file" id="registryFileInput" accept=".json" hidden />
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Sync Status</h3>
+          <div id="syncStatus" class="sync-status">
+            <div class="sync-row">
+              <span class="sync-label">API Keys</span>
+              <span class="sync-value sync-check" id="syncApiKeys">Checking...</span>
+            </div>
+            <div class="sync-row">
+              <span class="sync-label">AI Provider</span>
+              <span class="sync-value" id="syncProvider">Checking...</span>
+            </div>
+            <div class="sync-row">
+              <span class="sync-label">Documents</span>
+              <span class="sync-value" id="syncDocuments">Checking...</span>
+            </div>
+            <div class="sync-row">
+              <span class="sync-label">Shortcuts</span>
+              <span class="sync-value" id="syncShortcuts">Checking...</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <span id="toastText"></span>
+  </div>
+
+  <script src="../lib/file-parser.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
