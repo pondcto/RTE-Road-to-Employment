@@ -1,8 +1,70 @@
 // ============================================================
-// RTE - Popup Logic (with MsgCopyer Integration)
+// RTE - Popup Logic (with MsgCopyer Integration + Auth)
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ──────────── Authentication ────────────
+  const loginScreen = document.getElementById('loginScreen');
+  const mainApp = document.getElementById('mainApp');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginBtn = document.getElementById('loginBtn');
+  const loginError = document.getElementById('loginError');
+  const lockLink = document.getElementById('lockLink');
+
+  function showLogin() {
+    loginScreen.style.display = 'block';
+    mainApp.style.display = 'none';
+    loginPassword.value = '';
+    loginError.style.display = 'none';
+    loginPassword.focus();
+  }
+
+  function showApp() {
+    loginScreen.style.display = 'none';
+    mainApp.style.display = 'block';
+  }
+
+  // Check if already authenticated
+  chrome.runtime.sendMessage({ type: 'checkAuth' }, (resp) => {
+    if (chrome.runtime.lastError || !resp?.authenticated) showLogin();
+    else showApp();
+  });
+
+  // Login
+  loginBtn.addEventListener('click', () => {
+    const pw = loginPassword.value;
+    if (!pw) { loginError.textContent = 'Please enter a password'; loginError.style.display = 'block'; return; }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Verifying...';
+
+    chrome.runtime.sendMessage({ type: 'login', password: pw }, (resp) => {
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Unlock';
+      if (resp?.ok) {
+        showApp();
+        refreshStatus();
+      } else {
+        loginError.textContent = resp?.error || 'Incorrect password';
+        loginError.style.display = 'block';
+        loginPassword.value = '';
+        loginPassword.focus();
+      }
+    });
+  });
+
+  // Enter key to submit
+  loginPassword.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loginBtn.click();
+  });
+
+  // Lock
+  lockLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.runtime.sendMessage({ type: 'logout' }, () => showLogin());
+  });
+
+  // ──────────── Main App ────────────
   const sourceLangEl = document.getElementById('sourceLang');
   const targetLangEl = document.getElementById('targetLang');
   const activateBtn = document.getElementById('activateBtn');

@@ -5,6 +5,17 @@
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ──────────── Auth Check ────────────
+  chrome.runtime.sendMessage({ type: 'checkAuth' }, (resp) => {
+    if (chrome.runtime.lastError || !resp?.authenticated) {
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#94a3b8;font-family:Segoe UI,sans-serif;background:#0a0a14;"><div style="text-align:center;"><h2 style="color:#e2e8f0;margin-bottom:8px;">Locked</h2><p>Please unlock RTE from the popup first.</p></div></div>';
+      return;
+    }
+    initOptions();
+  });
+});
+
+function initOptions() {
   // ──────────── Sidebar Navigation ────────────
   const sidebarItems = document.querySelectorAll('.sidebar-item');
   const sections = document.querySelectorAll('.content-section');
@@ -598,4 +609,4 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Local data cleared. Synced settings preserved.');
     });
   });
-});
+}

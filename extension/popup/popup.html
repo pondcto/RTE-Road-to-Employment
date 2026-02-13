@@ -7,6 +7,30 @@
   <title>RTE Extension</title>
 </head>
 <body>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen" style="display:none;">
+    <header class="header">
+      <div class="header-brand">
+        <div class="logo">R</div>
+        <div>
+          <h1 class="header-title">RTE</h1>
+          <p class="header-subtitle">Enter password to continue</p>
+        </div>
+      </div>
+    </header>
+    <section class="section">
+      <label class="label">Password</label>
+      <input type="password" class="input-password" id="loginPassword" placeholder="Enter password..." autocomplete="off" />
+      <p class="login-error" id="loginError" style="display:none;">Incorrect password</p>
+      <button class="btn btn-primary" id="loginBtn" style="margin-top:12px;">
+        <span>Unlock</span>
+      </button>
+    </section>
+  </div>
+
+  <!-- Main App (hidden until authenticated) -->
+  <div id="mainApp" style="display:none;">
+
   <!-- Header -->
   <header class="header">
     <div class="header-brand">
@@ -191,8 +215,11 @@
   <!-- Footer -->
   <footer class="footer">
     <a href="#" id="settingsLink" class="footer-link">Settings</a>
+    <a href="#" id="lockLink" class="footer-link" style="color:#ef4444;">Lock</a>
     <span class="footer-version">v1.1.0</span>
   </footer>
+
+  </div><!-- /mainApp -->
 
   <script src="popup.js"></script>
 </body>

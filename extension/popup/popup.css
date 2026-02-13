@@ -355,3 +355,37 @@ kbd {
   background: rgba(45, 140, 255, 0.15);
   color: #38bdf8;
 }
+
+/* ──────── Login Screen ──────── */
+.login-screen {
+  min-height: 200px;
+}
+
+.input-password {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-password::placeholder {
+  color: var(--text-muted);
+}
+
+.input-password:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.login-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 8px;
+  font-weight: 500;
+}

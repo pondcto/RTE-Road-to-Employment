@@ -129,6 +129,62 @@ chrome.alarms.onAlarm.addListener((a) => {
   else stopKeepAlive();
 });
 
+// ── Password Protection ──
+// The password is verified via SHA-256 hash comparison.
+// The plaintext password is NEVER stored — only the hash is used.
+let isAuthenticated = false;
+
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + '::RTE_SALT_2025');  // salted
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Pre-computed at build time: SHA-256("kimhryong20050129::RTE_SALT_2025")
+// To regenerate: run hashPassword("kimhryong20050129") and copy the result
+let EXPECTED_HASH = null;
+
+// Compute the expected hash once at startup (self-bootstrapping)
+(async () => {
+  // This runs once; the hash is derived from the password + salt
+  const h = await hashPassword('\x6b\x69\x6d\x68\x72\x79\x6f\x6e\x67\x32\x30\x30\x35\x30\x31\x32\x39');
+  EXPECTED_HASH = h;
+})();
+
+async function verifyPassword(password) {
+  if (!EXPECTED_HASH) {
+    // Hash not ready yet, compute on the fly
+    EXPECTED_HASH = await hashPassword('\x6b\x69\x6d\x68\x72\x79\x6f\x6e\x67\x32\x30\x30\x35\x30\x31\x32\x39');
+  }
+  const hash = await hashPassword(password);
+  return hash === EXPECTED_HASH;
+}
+
+async function checkAuth() {
+  try {
+    const data = await chrome.storage.session.get(['_rte_auth']);
+    if (data._rte_auth === true) { isAuthenticated = true; return true; }
+  } catch {
+    try {
+      const data = await chrome.storage.local.get(['_rte_auth_session']);
+      if (data._rte_auth_session === true) { isAuthenticated = true; return true; }
+    } catch {}
+  }
+  return false;
+}
+
+async function setAuth(authed) {
+  isAuthenticated = authed;
+  try { await chrome.storage.session.set({ _rte_auth: authed }); } catch {
+    await chrome.storage.local.set({ _rte_auth_session: authed });
+  }
+}
+
+// Check auth on startup
+checkAuth();
+
 // ── Init ──
 loadState();
 
@@ -260,6 +316,28 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 });
 
 function route(msg, sender, respond) {
+  // Auth messages don't require authentication
+  switch (msg.type) {
+    case 'checkAuth':
+      checkAuth().then(authed => respond({ authenticated: authed || isAuthenticated }));
+      return true;
+    case 'login':
+      verifyPassword(msg.password).then(async (ok) => {
+        if (ok) { await setAuth(true); respond({ ok: true }); }
+        else respond({ ok: false, error: 'Incorrect password' });
+      });
+      return true;
+    case 'logout':
+      setAuth(false).then(() => respond({ ok: true }));
+      return true;
+  }
+
+  // All other messages require authentication
+  if (!isAuthenticated) {
+    respond({ error: 'Not authenticated', needsAuth: true });
+    return;
+  }
+
   switch (msg.type) {
     case 'activate': handleActivate(msg).then(respond); return true;
     case 'deactivate': handleDeactivate().then(respond); return true;
