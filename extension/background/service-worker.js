@@ -507,7 +507,7 @@ async function handleActivate({ sourceLang, targetLang }) {
   state.sourceLang = sourceLang; state.targetLang = targetLang;
   state.fullTranscript = [];
   lastVisibleCaptions = []; translateDirty = false;
-  committedBlocks.length = 0;
+  committedBlocks.length = 0; teamsSelfName = null;
 
   const s = await getSettings(['spellingCorrection']);
   state.spellingCorrection = s.spellingCorrection !== false;
@@ -527,7 +527,7 @@ async function handleDeactivate() {
   state.active = false; state.platform = null; state.meetingTabId = null;
   state.fullTranscript = [];
   lastVisibleCaptions = []; translateDirty = false;
-  committedBlocks.length = 0;
+  committedBlocks.length = 0; teamsSelfName = null;
   pendingCorrectionId++; // Cancel any pending spelling corrections
   if (state.translateTabId) { try { await chrome.tabs.remove(state.translateTabId); } catch {} state.translateTabId = null; }
   // Notify content scripts to clean up (stop intervals/observers)
@@ -544,53 +544,97 @@ async function handleDeactivate() {
 let lastVisibleCaptions = [];  // The last batch received
 let translateDirty = false;
 let pendingCorrectionId = 0;
+let teamsSelfName = null;  // The user's own name in Teams (detected by "one two three" phrase)
 
 /**
  * Handle a batch of ALL currently visible captions from the meeting page.
- * This is the primary transcript handler.
+ *
+ * Two modes based on platform:
+ *
+ * TEAMS: Captions stay in a scrollable list — the batch IS the transcript.
+ *   No commit logic needed. We just use the visible entries directly.
+ *
+ * MEET: Captions fade in/out — we commit disappeared captions and merge
+ *   with currently visible ones.
  */
 function handleCaptionBatch(msg, sender) {
   if (!state.active) return;
   if (sender.tab) { state.meetingTabId = sender.tab.id; state.platform = msg.platform || detectPlatform(sender.tab.url); }
 
   const captions = msg.captions || [];
+  const platform = msg.platform || state.platform;
+
+  if (platform === 'teams') {
+    // ── TEAMS MODE: Batch IS the transcript ──
+    // Teams keeps all captions in a persistent scrollable list.
+    // Detect self by "one two three" phrase, then replace name with "You".
+    // Merge consecutive entries from the same speaker into one block.
+    if (captions.length === 0) return;
+
+    // Detect self-identification: if someone says "one, two, three" (or variants),
+    // remember their name as the local user
+    if (!teamsSelfName) {
+      for (const c of captions) {
+        const lower = (c.text || '').toLowerCase().replace(/[.,!?]/g, '');
+        if (/\bone\s+two\s+three\b/.test(lower) || /\b1\s*2\s*3\b/.test(lower)) {
+          teamsSelfName = c.speaker;
+          // Notify the user with an overlay message
+          if (state.meetingTabId) {
+            safeSendTab(state.meetingTabId, {
+              type: 'showOverlay',
+              mode: 'info',
+              content: `"${c.speaker}" has been recognized as You.`,
+              isError: false,
+            });
+          }
+          break;
+        }
+      }
+    }
+
+    // Merge consecutive same-speaker entries and replace self-name with "You"
+    const merged = [];
+    for (const c of captions) {
+      const speaker = (teamsSelfName && c.speaker === teamsSelfName) ? 'You' : c.speaker;
+      const last = merged[merged.length - 1];
+      if (last && last.speaker === speaker) {
+        last.text += ' ' + c.text;
+      } else {
+        merged.push({ speaker, text: c.text, timestamp: Date.now() });
+      }
+    }
+    state.fullTranscript = merged;
+
+    translateDirty = true;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(flushToTranslate, DEBOUNCE_FIRST_MS);
+    return;
+  }
+
+  // ── MEET MODE: Commit + merge ──
+  // Google Meet captions fade away, so we commit disappeared ones.
   if (captions.length === 0 && lastVisibleCaptions.length === 0) return;
 
-  // Find which old visible captions disappeared (committed/finalized)
-  // and which new ones appeared or changed.
   const oldVisible = lastVisibleCaptions;
   const newVisible = captions;
 
-  // Commit old captions that are no longer visible.
-  // We compare structurally: an old caption is "gone" if it's not in the new batch.
-  // Walk through old captions and check if each still exists in new batch (by position).
-  // The key insight: captions are ordered top-to-bottom. Old ones fade from the top.
-  // So we commit old captions from the start that don't appear in the new batch.
-
+  // Commit old captions that are no longer visible
   if (oldVisible.length > 0 && newVisible.length > 0) {
-    // Find which old captions were dropped
     const newTexts = newVisible.map(c => c.speaker + ':' + c.text);
     for (const old of oldVisible) {
       const key = old.speaker + ':' + old.text;
       if (!newTexts.includes(key)) {
-        // This caption disappeared — commit it if not already in transcript
         commitCaption(old.speaker, old.text);
       }
     }
   } else if (oldVisible.length > 0 && newVisible.length === 0) {
-    // All captions disappeared — commit all
     for (const old of oldVisible) {
       commitCaption(old.speaker, old.text);
     }
   }
 
-  // Update the visible captions
   lastVisibleCaptions = newVisible.map(c => ({ speaker: c.speaker, text: c.text }));
-
-  // The full transcript for display = committed blocks + current visible captions
-  // But we need to avoid duplicating the last committed block if it's the same as
-  // the first visible caption (the same speaker continuing).
-  rebuildTranscript();
+  rebuildMeetTranscript();
   translateDirty = true;
 
   clearTimeout(debounceTimer);
@@ -598,17 +642,15 @@ function handleCaptionBatch(msg, sender) {
 }
 
 /**
- * Commit a finalized caption to the permanent transcript.
- * Merges with the last committed entry if same speaker.
+ * Commit a finalized caption to the permanent transcript (Meet only).
  */
 const committedBlocks = [];
 
 function commitCaption(speaker, text) {
   if (!text) return;
   const last = committedBlocks[committedBlocks.length - 1];
-  if (last && last.speaker === speaker && last.text === text) return; // Already committed
+  if (last && last.speaker === speaker && last.text === text) return;
   if (last && last.speaker === speaker) {
-    // Same speaker continuing — only update if text is longer/different
     if (text.length > last.text.length || !text.startsWith(last.text.slice(0, 10))) {
       last.text = text;
     }
@@ -618,15 +660,14 @@ function commitCaption(speaker, text) {
 }
 
 /**
- * Rebuild state.fullTranscript from committed + visible.
+ * Rebuild transcript from committed + visible (Meet only).
  */
-function rebuildTranscript() {
+function rebuildMeetTranscript() {
   const result = committedBlocks.map(b => ({ ...b }));
 
   for (const cap of lastVisibleCaptions) {
     const last = result[result.length - 1];
     if (last && last.speaker === cap.speaker) {
-      // Same speaker — update their text to latest visible version
       last.text = cap.text;
       last.timestamp = Date.now();
     } else {
@@ -668,8 +709,9 @@ async function flushToTranslate() {
   const transcript = state.fullTranscript;
   if (transcript.length === 0) return;
 
-  // Only show the last 10 sentences in Google Translate
-  const recentBlocks = transcript.slice(-10).map(e => ({
+  // Show last N sentences based on platform: 10 for Meet, 20 for Teams
+  const limit = state.platform === 'teams' ? 20 : 10;
+  const recentBlocks = transcript.slice(-limit).map(e => ({
     speaker: e.speaker,
     text: e.text,
   }));
